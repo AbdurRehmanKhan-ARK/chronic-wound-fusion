@@ -1,0 +1,35 @@
+Evaluated 111 clean test-set samples
+
+Overall accuracy : 0.7387
+Macro F1         : 0.7449
+Weighted F1      : 0.7433
+
+Per-class accuracy:
+  background      0.9333
+  diabetic        0.6957
+  normal-skin     0.9333
+  pressure        0.4667
+  surgical        0.5789
+  venous          0.8333
+
+Confusion matrix (rows = true, cols = predicted):
+[[14  0  1  0  0  0]
+ [ 0 16  0  3  0  4]
+ [ 0  1 14  0  0  0]
+ [ 0  2  0  7  4  2]
+ [ 0  2  0  5 11  1]
+ [ 0  0  0  4  0 20]]
+
+Full classification report:
+              precision    recall  f1-score   support
+
+  background     1.0000    0.9333    0.9655        15
+    diabetic     0.7619    0.6957    0.7273        23
+ normal-skin     0.9333    0.9333    0.9333        15
+    pressure     0.3684    0.4667    0.4118        15
+    surgical     0.7333    0.5789    0.6471        19
+      venous     0.7407    0.8333    0.7843        24
+
+    accuracy                         0.7387       111
+   macro avg     0.7563    0.7402    0.7449       111
+weighted avg     0.7546    0.7387    0.7433       111

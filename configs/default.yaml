@@ -1,0 +1,18 @@
+img_size: 224
+batch_size: 16
+lr: 0.001
+epochs: 5
+num_classes: 6
+seed: 42
+dataset:
+  path: data/raw/azh/wound_classification-main/data/ROI
+  small_subset: true
+  subset_per_class: 50
+training:
+  device: cpu
+  num_workers: 2
+augmentation:
+  rotation: 15
+  hflip: true
+  vflip: false
+  brightness: 0.2

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+env/
+.env
+
+# Model artifacts (regenerable via scripts)
+*.pt
+*.pth
+checkpoints/
+
+# Data arrays / OOF outputs (regenerable via scripts)
+*.npy
+*.npz
+
+# Datasets — never push raw or processed image data
+data/raw/*
+!data/raw/azh/wound_classification-main/README.md
+!data/raw/azh/wound_classification-main/data/npy/wound_label.npy
+data/processed/
+
+# Generated pipeline outputs (checkpoints, OOF, gating weights)
+outputs/01_oof/
+outputs/02_gating/
+
+# Leaked-run archive — audit trail only, not for public repo
+archive/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+desktop.ini
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
