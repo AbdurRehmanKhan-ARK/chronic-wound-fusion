@@ -1,4 +1,4 @@
-# Chronic Wound Classification -  Gated Multi-Model Fusion
+# Chronic Wound Classification — Gated Multi-Model Fusion
 
 A leakage-free deep learning pipeline that classifies wound photographs into six categories using three CNN backbones (VGG19, DenseNet201, MobileNetV2) combined by a learned gating network trained on out-of-fold (OOF) predictions.
 
@@ -6,7 +6,7 @@ A leakage-free deep learning pipeline that classifies wound photographs into six
 
 ## Table of Contents
 
-- [Chronic Wound Classification -  Gated Multi-Model Fusion](#chronic-wound-classification----gated-multi-model-fusion)
+- [Chronic Wound Classification — Gated Multi-Model Fusion](#chronic-wound-classification--gated-multi-model-fusion)
   - [Table of Contents](#table-of-contents)
   - [1. What this project does](#1-what-this-project-does)
   - [2. How the system works](#2-how-the-system-works)
@@ -28,18 +28,18 @@ A leakage-free deep learning pipeline that classifies wound photographs into six
 
 Given one photograph, the system selects one of six labels:
 
-| Class | Meaning |
-|---|---|
-| `background` | No wound visible (surface, cloth, background skin) |
-| `normal-skin` | Healthy intact skin |
-| `diabetic` | Diabetic foot ulcer |
-| `venous` | Venous leg ulcer |
-| `pressure` | Pressure ulcer (bed sore) |
-| `surgical` | Surgical wound |
+| Class         | Meaning                                            |
+| ------------- | -------------------------------------------------- |
+| `background`  | No wound visible (surface, cloth, background skin) |
+| `normal-skin` | Healthy intact skin                                |
+| `diabetic`    | Diabetic foot ulcer                                |
+| `venous`      | Venous leg ulcer                                   |
+| `pressure`    | Pressure ulcer (bed sore)                          |
+| `surgical`    | Surgical wound                                     |
 
-**In plain language:** three experienced "specialist" models each look at the photo and give an opinion (six probabilities each). A small fourth network -  the **gating network** -  acts as a coordinator: it reads all three opinions and learns which specialist to trust more for *this particular image*. The coordinator's answer becomes the final classification.
+**In plain language:** three experienced "specialist" models each look at the photo and give an opinion (six probabilities each). A small fourth network — the **gating network** — acts as a coordinator: it reads all three opinions and learns which specialist to trust more for _this particular image_. The coordinator's answer becomes the final classification.
 
-Why an ensemble? Different architectures make different mistakes. A coordinator that weighs them per image can outperform any fixed combination -  and this is verified experimentally in this project (Section 5.3).
+Why an ensemble? Different architectures make different mistakes. A coordinator that weighs them per image can outperform any fixed combination — and this is verified experimentally in this project (Section 5.3).
 
 ## 2. How the system works
 
@@ -60,15 +60,15 @@ flowchart TB
 
 Key components:
 
-| Component | Where | What it does |
-|---|---|---|
-| Backbones | `scripts/gen_oof_preds.py` | Pretrained on ImageNet, six-class head added; trained with backbone frozen (Phase 1) |
-| Group-aware cross-validation | `scripts/gen_oof_preds.py` | `StratifiedGroupKFold` (5 folds) keeps an original image and all its augmented copies inside one fold |
-| Gating network | `scripts/fusion/train_gating_mlp.py` | Small MLP trained on OOF probabilities only; validated on an OOF split, never on the test set |
-| Evaluation | `scripts/evaluate_gated_fusion.py` | Computes metrics exactly once on the untouched test set |
-| Ablation | `scripts/make_ablation_table.py` | Compares singles, averaging, majority vote and gating from saved artifacts (no retraining) |
+| Component                    | Where                                | What it does                                                                                          |
+| ---------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Backbones                    | `scripts/gen_oof_preds.py`           | Pretrained on ImageNet, six-class head added; trained with backbone frozen (Phase 1)                  |
+| Group-aware cross-validation | `scripts/gen_oof_preds.py`           | `StratifiedGroupKFold` (5 folds) keeps an original image and all its augmented copies inside one fold |
+| Gating network               | `scripts/fusion/train_gating_mlp.py` | Small MLP trained on OOF probabilities only; validated on an OOF split, never on the test set         |
+| Evaluation                   | `scripts/evaluate_gated_fusion.py`   | Computes metrics exactly once on the untouched test set                                               |
+| Ablation                     | `scripts/make_ablation_table.py`     | Compares singles, averaging, majority vote and gating from saved artifacts (no retraining)            |
 
-**Training stages per backbone (per fold):** *Phase 1* trains only the classification head while the pretrained feature extractor is frozen (up to 8 epochs, early stopping patience 5, Adam, lr 1e-4). *Phase 2* (optional, off by default) would unfreeze the last feature block and fine-tune it at lr/10 -  it was **not** executed for the reported results.
+**Training stages per backbone (per fold):** _Phase 1_ trains only the classification head while the pretrained feature extractor is frozen (up to 8 epochs, early stopping patience 5, Adam, lr 1e-4). _Phase 2_ (optional, off by default) would unfreeze the last feature block and fine-tune it at lr/10 — it was **not** executed for the reported results.
 
 ## 3. Processing pipeline
 
@@ -88,11 +88,11 @@ Each numbered stage is one script; the commands are in [Section 6](#6-getting-st
 
 An earlier version of this pipeline contained **data leakage**: evaluation data influenced training in an invalid way, so the earlier accuracy was inflated and could not be reported. In plain terms, the model was being asked questions it had already seen the answers to. Two code bugs and one methodological flaw were identified:
 
-| # | Problem | Plain description | Fix |
-|---|---|---|---|
-| 1 | Fallback copy | When an expected test file was missing, the script silently copied a training image into the test folder | Removed; a missing file now raises an error |
-| 2 | Fabricated test paths | The gating stage *constructed* test paths by renaming train paths instead of reading the real test directory | Gating script now scans `data/processed/test/` directly; paths are never derived from train metadata |
-| 3 | Non-group-aware split | Augmented copies of one source image could land on both sides of a fold boundary (near-duplicate leakage that filename checks cannot detect) | `StratifiedGroupKFold` with group = original source stem |
+| #   | Problem               | Plain description                                                                                                                            | Fix                                                                                                  |
+| --- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | Fallback copy         | When an expected test file was missing, the script silently copied a training image into the test folder                                     | Removed; a missing file now raises an error                                                          |
+| 2   | Fabricated test paths | The gating stage _constructed_ test paths by renaming train paths instead of reading the real test directory                                 | Gating script now scans `data/processed/test/` directly; paths are never derived from train metadata |
+| 3   | Non-group-aware split | Augmented copies of one source image could land on both sides of a fold boundary (near-duplicate leakage that filename checks cannot detect) | `StratifiedGroupKFold` with group = original source stem                                             |
 
 Remediation performed:
 
@@ -107,7 +107,9 @@ Group-id collisions (original/aug siblings):   0
 >>> No leakage detected.
 ```
 
-**Engineering principle adopted:** never fabricate data to satisfy a code path. A missing file is information that something upstream is broken -  fail loudly instead of inventing the missing piece.
+The captured audit outputs are committed at `outputs/leakage_audit_output.txt` and `outputs/check_clean_split_output.txt`.
+
+**Engineering principle adopted:** never fabricate data to satisfy a code path. A missing file is information that something upstream is broken — fail loudly instead of inventing the missing piece.
 
 ## 5. Results
 
@@ -115,24 +117,24 @@ All numbers below come from a single evaluation on a clean, untouched test set o
 
 ### 5.1 Overall metrics
 
-| Metric | Value |
-|---|---|
+| Metric               | Value                 |
+| -------------------- | --------------------- |
 | **Overall accuracy** | **73.87%** (82 / 111) |
-| **Macro F1** | **74.49%** |
-| **Weighted F1** | **74.33%** |
+| **Macro F1**         | **74.49%**            |
+| **Weighted F1**      | **74.33%**            |
 
 With only 111 test images, the 95% Wilson confidence interval for accuracy is approximately **65.0% – 81.1%**; differences smaller than ~5 accuracy points between model variants should not be treated as meaningful.
 
 ### 5.2 Per-class results and confusion matrix
 
-| Class | Precision | Recall | F1 | Test images |
-|---|---|---|---|---|
-| background | 1.0000 | 0.9333 | 0.9655 | 15 |
-| diabetic | 0.7619 | 0.6957 | 0.7273 | 23 |
-| normal-skin | 0.9333 | 0.9333 | 0.9333 | 15 |
-| pressure | 0.3684 | 0.4667 | 0.4118 | 15 |
-| surgical | 0.7333 | 0.5789 | 0.6471 | 19 |
-| venous | 0.7407 | 0.8333 | 0.7843 | 24 |
+| Class       | Precision | Recall | F1     | Test images |
+| ----------- | --------- | ------ | ------ | ----------- |
+| background  | 1.0000    | 0.9333 | 0.9655 | 15          |
+| diabetic    | 0.7619    | 0.6957 | 0.7273 | 23          |
+| normal-skin | 0.9333    | 0.9333 | 0.9333 | 15          |
+| pressure    | 0.3684    | 0.4667 | 0.4118 | 15          |
+| surgical    | 0.7333    | 0.5789 | 0.6471 | 19          |
+| venous      | 0.7407    | 0.8333 | 0.7843 | 24          |
 
 Rows = true class, columns = predicted class (order: background, diabetic, normal-skin, pressure, surgical, venous):
 
@@ -149,22 +151,22 @@ Rows = true class, columns = predicted class (order: background, diabetic, norma
 
 ### 5.3 Ablation and fusion comparison
 
-All methods evaluated on the same clean test set from saved artifacts (`scripts/make_ablation_table.py`, no retraining):
+All methods evaluated on the same clean test set from saved artifacts (`scripts/make_ablation_table.py`, no retraining; captured output: `outputs/03_figures/ablation_table.txt`):
 
-| Method | Accuracy | Macro F1 | Weighted F1 |
-|---|---|---|---|
-| VGG19 (single) | 71.17% | 71.09 | 70.67 |
-| DenseNet201 (single) | 72.07% | 72.80 | 72.32 |
-| MobileNetV2 (single) | 74.77% | 74.40 | 74.49 |
-| Simple average fusion | 72.97% | 72.70 | 72.34 |
-| Majority vote | 75.68% | 75.77 | 75.44 |
-| **Gated MLP fusion (final method)** | **73.87%** | **74.49** | **74.33** |
+| Method                              | Accuracy   | Macro F1  | Weighted F1 |
+| ----------------------------------- | ---------- | --------- | ----------- |
+| VGG19 (single)                      | 71.17%     | 71.09     | 70.67       |
+| DenseNet201 (single)                | 72.07%     | 72.80     | 72.32       |
+| MobileNetV2 (single)                | 74.77%     | 74.40     | 74.49       |
+| Simple average fusion               | 72.97%     | 72.70     | 72.34       |
+| Majority vote                       | 75.68%     | 75.77     | 75.44       |
+| **Gated MLP fusion (final method)** | **73.87%** | **74.49** | **74.33**   |
 
-*Interpretation:* the learned gate **clearly outperforms simple averaging** (+1.79 macro F1, +0.90 accuracy -  the value proposition of per-image weighting) and is **statistically tied with the strongest single backbone**. Majority voting's nominal lead (+1.28 macro F1) lies within the noise band of this test size. Gating is retained for its consistent advantage over fixed-weight fusion and its per-sample interpretability.
+_Interpretation:_ the learned gate **clearly outperforms simple averaging** (+1.79 macro F1, +0.90 accuracy — the value proposition of per-image weighting) and is **statistically tied with the strongest single backbone**. Majority voting's nominal lead (+1.28 macro F1) lies within the noise band of this test size. Gating is retained for its consistent advantage over fixed-weight fusion and its per-sample interpretability.
 
 ## 6. Getting started
 
-Prerequisites: Python 3.11+, Git. A CUDA GPU is *not* required (the reported run was trained on CPU only, Section 8).
+Prerequisites: Python 3.11+, Git. A CUDA GPU is _not_ required (the reported run was trained on CPU only, Section 8).
 
 ```powershell
 git clone https://github.com/AbdurRehmanKhan-ARK/chronic-wound-fusion.git
@@ -209,45 +211,70 @@ Each OOF run saves `{model}_oof_probs.npy`, `{model}_oof_meta.csv`, and `checkpo
 
 ## 7. Repository structure
 
+Scripts marked **[pipeline]** are the canonical pipeline used for the reported results. Scripts marked **[legacy]** are earlier prototypes kept for reference and are not part of the reported pipeline.
+
 ```
 chronic-wound-fusion/
 ├── README.md
-├── leakage_audit.py                  # Standalone split-integrity audit (read-only)
+├── leakage_audit.py                   # [pipeline] standalone split-integrity audit (read-only)
 ├── requirements.txt
-├── configs/default.yaml              # Legacy prototype config (does not describe the reported run)
+├── configs/
+│   └── default.yaml                   # [legacy] prototype config; does NOT describe the reported run
 ├── docs/
-│   ├── REPORT.md                     # Full verified project report
-│   └── verification_checklist.md     # How the verification artifacts were produced
+│   ├── REPORT.md                      # Full verified project report (debugging + results + evidence)
+│   ├── project-plan.docx              # Original project plan
+│   └── chronic_fusion_extracted.txt   # Extracted text of the earlier written report
+├── notebooks/
+│   └── 01_setup_check.ipynb           # Environment sanity checks
+├── outputs/                           # Committed verification evidence (small text files)
+│   ├── leakage_audit_output.txt       # Audit result: 0 collisions, PASS
+│   ├── check_clean_split_output.txt   # Split overlap check: 0 duplicates, PASS
+│   ├── split_counts.txt               # Per-class train/val/test counts (2100 / 110 / 111)
+│   └── 03_figures/
+│       ├── gated_fusion_evaluation_report.txt   # Final metrics + confusion matrix
+│       └── ablation_table.txt                   # Singles vs averaging vs voting vs gate
 ├── scripts/
-│   ├── rebuild_clean_split.py        # Raw ROI -> clean train/val/test (seed 42)
-│   ├── augment_train_only.py         # Balanced offline augmentation, train only
-│   ├── check_clean_split.py          # Partition overlap check
-│   ├── gen_oof_preds.py              # Group-aware 5-fold OOF training per backbone
-│   ├── make_ablation_table.py        # Singles vs averaging vs voting vs gate
-│   ├── dataset_stats.py              # Per-split, per-class image counts
-│   ├── evaluate_gated_fusion.py      # Final metrics from gate predictions
-│   └── fusion/train_gating_mlp.py    # Canonical gating trainer + clean test evaluation
-├── src/
-│   ├── data/dataset.py, preprocess.py
-│   └── models/backbones.py, gating.py
-└── outputs/03_figures/               # Final evaluation report + confusion matrix figure
+│   ├── rebuild_clean_split.py         # [pipeline] raw ROI -> clean train/val/test (seed 42, 70/15/15)
+│   ├── augment_train_only.py          # [pipeline] balanced offline augmentation, train folder only
+│   ├── check_clean_split.py           # [pipeline] partition overlap check
+│   ├── gen_oof_preds.py               # [pipeline] group-aware 5-fold OOF training per backbone
+│   ├── fusion/train_gating_mlp.py     # [pipeline] canonical gating trainer + clean test evaluation
+│   ├── evaluate_gated_fusion.py       # [pipeline] final metrics from gate predictions
+│   ├── make_ablation_table.py         # [pipeline] fusion comparison from saved artifacts (no retraining)
+│   ├── dataset_stats.py               # [utility] per-split, per-class image counts
+│   ├── verify_data.py                 # [utility] raw ROI image counts
+│   ├── augment_and_save.py            # [legacy] older augmentation variant
+│   ├── train_base.py                  # [legacy] simple single-model trainer
+│   ├── train_backbone_small.py        # [legacy] small-subset experiments
+│   ├── train_vgg_small.py             # [legacy] small-subset VGG experiments
+│   ├── evaluate_vgg.py                # [legacy] single-model evaluation
+│   ├── evaluate_checkpoint.py         # [legacy] single-checkpoint evaluation (imports train_backbone_small)
+│   ├── train_gating.py                # [legacy] lighter OOF-only gate trainer (no test evaluation)
+│   └── parse_docx.py                  # [utility] docx text extraction used for report drafting
+└── src/
+    ├── data/
+    │   ├── dataset.py
+    │   └── preprocess.py
+    └── models/
+        ├── backbones.py               # VGG19 / DenseNet201 / MobileNetV2 loaders
+        └── gating.py                  # older feature-based gate variant (canonical gate: GatingMLP in fusion/)
 ```
 
-`data/` (raw and processed) and intermediate outputs (`outputs/01_oof/`, `outputs/02_gating/`, checkpoints) are generated locally and excluded from version control via `.gitignore`.
+`data/` (raw and processed) and the large intermediate outputs (`outputs/01_oof/`, `outputs/02_gating/`, checkpoints, `.npy` arrays) are generated locally and excluded from version control via `.gitignore` — they are reproducible with the Section 6 commands. The committed text files under `outputs/` are the captured verification evidence (Section 4 and 5).
 
 ## 8. Reproducibility
 
-| Item | Value |
-|---|---|
-| Random seed | 42 (fixed across Python, NumPy, PyTorch; `StratifiedGroupKFold` and the gate's validation split included) |
-| Split | 70/15/15 per class from raw ROI data; test = 111 images (15/23/15/15/19/24) |
-| Training data | 2,100 images (balanced 350 per class after augmentation); val = 110 originals; no augmented file in val or test (audited) |
-| Input | 224 x 224, ImageNet normalization (mean 0.485/0.456/0.406, std 0.229/0.224/0.225) |
+| Item              | Value                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Random seed       | 42 (fixed across Python, NumPy, PyTorch; `StratifiedGroupKFold` and the gate's validation split included)                                                                      |
+| Split             | 70/15/15 per class from raw ROI data; test = 111 images (15/23/15/15/19/24)                                                                                                    |
+| Training data     | 2,100 images (balanced 350 per class after augmentation); val = 110 originals; no augmented file in val or test (audited)                                                      |
+| Input             | 224 x 224, ImageNet normalization (mean 0.485/0.456/0.406, std 0.229/0.224/0.225)                                                                                              |
 | Backbone training | Phase 1 only: up to 8 epochs per fold, early stopping patience 5, Adam, lr 1e-4, weight decay 1e-4, batch 16, CrossEntropyLoss; pretrained torchvision `IMAGENET1K_V1` weights |
-| Gating | MLP 18-64-6, Dropout 0.2, up to 50 epochs, patience 5, batch 64, lr 1e-3, weight decay 1e-4; validated on a 20% stratified OOF split |
-| Hardware | **CPU only** (no CUDA device on the training machine) |
-| Approx. runtime | VGG19 ≈ 24 h (5 folds); DenseNet201 and MobileNetV2 ≈ 3–4 h each; gate < 5 min |
-| Test inference | Per backbone: softmax averaged over the 5 fold checkpoints; concatenated 18-value vector fed to the gate |
+| Gating            | MLP 18-64-6, Dropout 0.2, up to 50 epochs, patience 5, batch 64, lr 1e-3, weight decay 1e-4; validated on a 20% stratified OOF split                                           |
+| Hardware          | **CPU only** (no CUDA device on the training machine)                                                                                                                          |
+| Approx. runtime   | VGG19 ≈ 24 h (5 folds); DenseNet201 and MobileNetV2 ≈ 3–4 h each; gate < 5 min                                                                                                 |
+| Test inference    | Per backbone: softmax averaged over the 5 fold checkpoints; concatenated 18-value vector fed to the gate                                                                       |
 
 Notes: per-fold epoch counts and the gate's exact stopping epoch were printed to console only and are documented as "up to N with early stopping". The class in `src/models/gating.py` is an older feature-based variant; the canonical gate used by the pipeline is `GatingMLP` in `scripts/fusion/train_gating_mlp.py`.
 
@@ -264,16 +291,16 @@ Notes: per-fold epoch counts and the gate's exact stopping epoch were printed to
 
 1. Phase 2 fine-tuning run (never executed; code path exists; a cloud GPU makes it a few hours).
 2. Class-weighted or focal loss targeting the pressure–surgical confusion.
-3. More pressure-class data -  the most direct remedy for the weakest class.
+3. More pressure-class data — the most direct remedy for the weakest class.
 4. Gate calibration (temperature scaling, selected on validation only).
 5. External-dataset validation before any clinical claim.
 
 ---
 
-*Data and checkpoints are excluded from this repository by design. The full debugging and verification record is documented in `docs/REPORT.md`.*
+_Data and checkpoints are excluded from this repository by design. The full debugging and verification record is documented in `docs/REPORT.md`._
 
 ## Acknowledgments
 
-- **AZH wound dataset** -  Advancing the Zenith in Healthcare chronic wound dataset.
+- **AZH wound dataset** — Advancing the Zenith in Healthcare chronic wound dataset.
 - Pretrained architectures via **torchvision** (VGG19, DenseNet201, MobileNetV2, ImageNet weights).
 - Supervision: **Miss Sania** (FYP supervisor).
