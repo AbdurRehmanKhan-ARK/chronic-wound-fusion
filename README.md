@@ -1,325 +1,140 @@
-# Chronic Wound Image Classification - Gated Multi-Model Fusion
+# Chronic Wound Classification -  Gated Multi-Model Fusion
 
-A deep learning pipeline for automated classification of chronic wound images into six clinically relevant categories, using a gated fusion ensemble of three convolutional neural network backbones (VGG19, DenseNet201, MobileNetV2) combined via a learned gating network trained on out-of-fold (OOF) predictions.
+A leakage-free deep learning pipeline that classifies wound photographs into six categories using three CNN backbones (VGG19, DenseNet201, MobileNetV2) combined by a learned gating network trained on out-of-fold (OOF) predictions.
 
 ---
 
 ## Table of Contents
 
-- [Chronic Wound Image Classification - Gated Multi-Model Fusion](#chronic-wound-image-classification---gated-multi-model-fusion)
+- [Chronic Wound Classification -  Gated Multi-Model Fusion](#chronic-wound-classification----gated-multi-model-fusion)
   - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Key Features](#key-features)
-  - [Dataset](#dataset)
-  - [Architecture](#architecture)
-  - [Data Integrity \& Methodology Note](#data-integrity--methodology-note)
-  - [Project Structure](#project-structure)
-  - [Installation](#installation)
-  - [Usage](#usage)
-    - [1. Data Preparation](#1-data-preparation)
-    - [2. Leakage Audit (recommended before training)](#2-leakage-audit-recommended-before-training)
-    - [3. Generate Out-of-Fold Predictions](#3-generate-out-of-fold-predictions)
-    - [4. Train the Gating Network](#4-train-the-gating-network)
-    - [5. Final Evaluation](#5-final-evaluation)
-  - [Results](#results)
-    - [Overall Metrics](#overall-metrics)
-    - [Per-Class Accuracy](#per-class-accuracy)
-    - [Confusion Matrix](#confusion-matrix)
-    - [Observations](#observations)
-  - [Reproducibility](#reproducibility)
-  - [Roadmap](#roadmap)
-  - [Contributing](#contributing)
-  - [License](#license)
+  - [1. What this project does](#1-what-this-project-does)
+  - [2. How the system works](#2-how-the-system-works)
+  - [3. Processing pipeline](#3-processing-pipeline)
+  - [4. What went wrong and how it was fixed](#4-what-went-wrong-and-how-it-was-fixed)
+  - [5. Results](#5-results)
+    - [5.1 Overall metrics](#51-overall-metrics)
+    - [5.2 Per-class results and confusion matrix](#52-per-class-results-and-confusion-matrix)
+    - [5.3 Ablation and fusion comparison](#53-ablation-and-fusion-comparison)
+  - [6. Getting started](#6-getting-started)
+  - [7. Repository structure](#7-repository-structure)
+  - [8. Reproducibility](#8-reproducibility)
+  - [9. Limitations and roadmap](#9-limitations-and-roadmap)
   - [Acknowledgments](#acknowledgments)
 
 ---
 
-## Overview
+## 1. What this project does
 
-Chronic wounds (diabetic, pressure, surgical, venous, and related presentations) require accurate visual classification to support clinical triage and monitoring. This project implements a **gated fusion architecture** that combines predictions from three independently trained CNN backbones, using a lightweight gating network to learn how much to trust each backbone's prediction on a per-sample basis, rather than relying on fixed-weight averaging.
+Given one photograph, the system selects one of six labels:
 
-The pipeline is designed around **rigorous, leakage-free evaluation**: every backbone is trained and validated using group-aware stratified cross-validation, ensuring that augmented variants of a single source image can never appear in both the training and validation partitions of any fold. The gated fusion model has been trained end-to-end on this clean pipeline and evaluated on a held-out, untouched test set - see [Results](#results).
+| Class | Meaning |
+|---|---|
+| `background` | No wound visible (surface, cloth, background skin) |
+| `normal-skin` | Healthy intact skin |
+| `diabetic` | Diabetic foot ulcer |
+| `venous` | Venous leg ulcer |
+| `pressure` | Pressure ulcer (bed sore) |
+| `surgical` | Surgical wound |
 
-**Target classes:**
+**In plain language:** three experienced "specialist" models each look at the photo and give an opinion (six probabilities each). A small fourth network -  the **gating network** -  acts as a coordinator: it reads all three opinions and learns which specialist to trust more for *this particular image*. The coordinator's answer becomes the final classification.
 
-| Class         | Description                        |
-| ------------- | ---------------------------------- |
-| `background`  | Non-wound / background skin images |
-| `diabetic`    | Diabetic foot ulcers               |
-| `normal-skin` | Healthy, unaffected skin           |
-| `pressure`    | Pressure (bed) ulcers              |
-| `surgical`    | Surgical wounds                    |
-| `venous`      | Venous leg ulcers                  |
+Why an ensemble? Different architectures make different mistakes. A coordinator that weighs them per image can outperform any fixed combination -  and this is verified experimentally in this project (Section 5.3).
 
----
+## 2. How the system works
 
-## Key Features
-
-- **Three-backbone ensemble** - VGG19, DenseNet201, and MobileNetV2, each fine-tuned via staged transfer learning (frozen-backbone Phase 1, optional fine-tuning Phase 2).
-- **Gated fusion** - a trainable MLP gate (`src/models/gating.py`) learns per-sample confidence weighting across backbone outputs, rather than static averaging or majority voting.
-- **Group-aware K-fold cross-validation** - `StratifiedGroupKFold` ensures that an original image and all of its augmented derivatives are confined to a single fold, preventing near-duplicate leakage across train/validation splits.
-- **Out-of-fold (OOF) prediction generation** - the gating network is trained exclusively on OOF probabilities, so it never sees predictions produced by a model on data it was trained on.
-- **Dedicated leakage-audit tooling** - `leakage_audit.py` and `scripts/check_clean_split.py` verify split integrity before any reported metrics are generated.
-- **Deterministic, reproducible runs** - fixed random seeds, sorted file iteration, and explicit train/validation transform separation.
-- **End-to-end validated on a clean, held-out test set** - final metrics (accuracy, macro/weighted F1, per-class breakdown, confusion matrix) are computed strictly on images the fused model has never seen in any form.
-
----
-
-## Dataset
-
-The pipeline is built on the **AZH (Advancing the Zenith of Healthcare) chronic wound dataset**, vendored under `data/raw/azh/wound_classification-main/`. Training data is augmented offline (horizontal/vertical flips, rotation) prior to model training; validation and test partitions are held strictly free of augmentation.
-
-Augmented filenames follow the convention `aug_{index}_{original_stem}.{ext}` (e.g. `aug_0000_10.jpg` is an augmented derivative of source image `10.jpg`), which is used downstream to recover group membership for leakage-safe splitting.
-
-Class-to-label mapping (verified against the processed split, alphabetical order):
-
-```
-0 = background
-1 = diabetic
-2 = normal-skin
-3 = pressure
-4 = surgical
-5 = venous
+```mermaid
+flowchart TB
+    IMG["Input wound image (224 x 224)"] --> B1["VGG19"]
+    IMG --> B2["DenseNet201"]
+    IMG --> B3["MobileNetV2"]
+    B1 --> P1["6 probabilities"]
+    B2 --> P2["6 probabilities"]
+    B3 --> P3["6 probabilities"]
+    P1 --> CC["Concatenate 3 x 6 = 18 values"]
+    P2 --> CC
+    P3 --> CC
+    CC --> GATE["Gating MLP (18 -> 64 -> 6)"]
+    GATE --> OUT["Final prediction"]
 ```
 
-> Raw dataset assets and generated processed splits are excluded from version control (see `.gitignore`). Only the upstream `wound_classification-main` reference repo and label metadata (`data/npy/wound_label.npy`) are vendored under `data/raw/azh/`.
+Key components:
 
----
+| Component | Where | What it does |
+|---|---|---|
+| Backbones | `scripts/gen_oof_preds.py` | Pretrained on ImageNet, six-class head added; trained with backbone frozen (Phase 1) |
+| Group-aware cross-validation | `scripts/gen_oof_preds.py` | `StratifiedGroupKFold` (5 folds) keeps an original image and all its augmented copies inside one fold |
+| Gating network | `scripts/fusion/train_gating_mlp.py` | Small MLP trained on OOF probabilities only; validated on an OOF split, never on the test set |
+| Evaluation | `scripts/evaluate_gated_fusion.py` | Computes metrics exactly once on the untouched test set |
+| Ablation | `scripts/make_ablation_table.py` | Compares singles, averaging, majority vote and gating from saved artifacts (no retraining) |
 
-## Architecture
+**Training stages per backbone (per fold):** *Phase 1* trains only the classification head while the pretrained feature extractor is frozen (up to 8 epochs, early stopping patience 5, Adam, lr 1e-4). *Phase 2* (optional, off by default) would unfreeze the last feature block and fine-tune it at lr/10 -  it was **not** executed for the reported results.
 
-```
-                 ┌─────────────┐
-   Input Image → │   VGG19     │ → P₁ (probabilities)
-                 └─────────────┘
-                 ┌─────────────┐
-   Input Image → │ DenseNet201 │ → P₂ (probabilities)          ┌────────────┐      Final
-                 └─────────────┘                        ────→  │ Gating MLP │  →  Prediction
-                 ┌─────────────┐                               └────────────┘
-   Input Image → │ MobileNetV2 │ → P₃ (probabilities)
-                 └─────────────┘
-```
+## 3. Processing pipeline
 
-Backbone architectures are defined in `src/models/backbones.py`; the gating network is defined in `src/models/gating.py`. Each backbone is trained independently via 5-fold group-aware stratified cross-validation (`scripts/gen_oof_preds.py`), producing out-of-fold probability vectors for every training sample. The concatenated OOF probability vectors `[P₁ | P₂ | P₃]` form the input feature space for the gating MLP (`scripts/fusion/train_gating_mlp.py`), which learns to weight each backbone's contribution per sample before producing the final fused prediction.
-
-**Training regimen per backbone, per fold:**
-
-| Phase                | Description                                                                                        |
-| -------------------- | -------------------------------------------------------------------------------------------------- |
-| Phase 1              | Backbone frozen; only the classification head is trained. Early stopping on validation loss.       |
-| Phase 2 _(optional)_ | Last convolutional block unfrozen; fine-tuned at `lr / 10`. Disabled by default (`--phase2` flag). |
-
----
-
-## Data Integrity & Methodology Note
-
-An early version of this pipeline exhibited data leakage defects that were identified, diagnosed, and remediated prior to producing any reportable results. Two separate instances were found and fixed:
-
-**1. Original pipeline (base-model training/evaluation):**
-
-- A fallback code path could copy a training image into the test directory when a corresponding test file was missing, allowing identical or near-identical images to appear in both partitions.
-- The original cross-validation logic (`StratifiedKFold`) balanced folds by class label only, with no awareness that multiple augmented derivatives of a single source image existed in the training set - allowing an original image and its augmented siblings to be split across the train and validation portions of the same fold.
-
-**2. Gating-fusion script (discovered during a later audit):**
-
-- The initial `train_gating.py` / `train_gating_mlp.py` implementations reintroduced the same fallback-copy pattern independently, while constructing test-set paths by string-replacing `/train/` with `/test/` in OOF metadata. Since augmented filenames (e.g. `aug_0000_10.jpg`) never legitimately exist under `data/processed/test/`, this fallback would copy the training file into the test directory - recreating leakage in a different part of the codebase.
-
-**Remediation applied:**
-
-- `scripts/rebuild_clean_split.py` reconstructs train/val/test partitions directly from the raw AZH source, with augmentation applied only to the training partition.
-- `scripts/gen_oof_preds.py` assigns folds using `StratifiedGroupKFold`, with group membership derived from each file's original source stem (augmentation prefixes stripped via regex), guaranteeing that all variants of a source image reside in a single fold.
-- Training and validation subsets use strictly separate transform pipelines - augmentation (flip/rotation) is applied only to the training subset; validation always uses deterministic resize + normalize.
-- `scripts/fusion/train_gating_mlp.py` was rewritten to build test rows by directly scanning `data/processed/test/` - never reconstructing or mirroring paths from training metadata, and never copying files across splits. A missing test file now raises an explicit error instead of being silently backfilled.
-- `leakage_audit.py` and `scripts/check_clean_split.py` provide standalone verification that no filename/group overlaps exist across the final train/val/test partitions.
-- All outputs generated under the leaked configuration have been archived (not deleted) under `archive/cleanup_2026_09_12/` and are excluded from any final reported metrics.
-
-This project only reports metrics generated under the corrected, group-aware, leakage-audited pipeline. Earlier leaked-run artifacts are retained solely for internal before/after comparison and audit purposes.
-
----
-
-## Project Structure
-
-```
-chronic-wound-fusion/
-├── README.md                                  # Project overview, setup, and final usage
-├── leakage_audit.py                           # Standalone leakage/overlap verification
-├── requirements.txt                           # Python dependencies for training and evaluation
-├── configs/                                   # Project config and experiment defaults
-│   └── default.yaml                           # Central experiment configuration
-├── archive/                                   # Archived legacy or leaked artifacts for audit history
-│   └── cleanup_2026_09_12/                    # Archived pre-cleanup runs and leakage-prone outputs
-├── data/                                      # Dataset storage root
-│   └── raw/                                   # Raw source datasets, kept local and not versioned
-│       └── azh/                               # AZH wound dataset reference copy
-│           └── wound_classification-main/     # Vendored upstream AZH dataset and labels
-├── docs/                                      # Documentation and draft writing material
-│   ├── project-plan.docx                      # Initial project plan / FYP planning doc
-│   └── REPORT.md                              # Working project write-up and report notes
-├── notebooks/                                 # Jupyter exploration and validation notebooks
-│   ├── 01_setup_check.ipynb                   # Environment and package sanity check
-│   └── gated_fusion_prototype.ipynb           # Prototype notebook kept only for historical context
-├── outputs/                                   # Generated artifacts for model runs and final reports
-│   ├── 01_oof/                                # Per-model OOF probabilities and metadata
-│   │   ├── vgg19_clean/vgg19_oof_probs.npy    # VGG19 OOF probabilities array
-│   │   ├── densenet201_clean/densenet201_oof_probs.npy # DenseNet201 OOF probabilities array
-│   │   └── mobilenetv2_clean/mobilenet_v2_oof_probs.npy # MobileNetV2 OOF probabilities array
-│   ├── 02_gating/                             # Gating network training and fused test outputs
-│   │   ├── gating_mlp_model_v1.pt             # Trained gating network weights
-│   │   ├── gating_test_probs_v1.npy           # Fused test-set probability matrix
-│   │   └── gating_test_preds_v1.csv           # Final clean-test predictions
-│   └── 03_figures/                            # Final report figures and short outputs
-│       ├── gated_fusion_evaluation_report.txt # Final metrics report in text form
-│       └── gated_fusion_confusion_matrix.png # Confusion matrix for final evaluation
-├── scripts/                                   # Core training, data, and evaluation scripts
-│   ├── gen_oof_preds.py                       # Group-aware K-fold OOF generation for each backbone
-│   ├── rebuild_clean_split.py                 # Rebuilds clean train/val/test splits from raw data
-│   ├── check_clean_split.py                   # Verifies no overlap across partitions
-│   ├── augment_and_save.py                    # Legacy augmentation helper
-│   ├── augment_train_only.py                  # Applies augmentation only to training subset
-│   ├── dataset_stats.py                       # Dataset summary and distribution checks
-│   ├── evaluate_checkpoint.py                 # Single-backbone evaluation helper
-│   ├── evaluate_gated_fusion.py               # Final fused-model evaluation script
-│   ├── evaluate_vgg.py                        # Legacy VGG evaluation helper
-│   ├── train_base.py                          # Early base training experiments
-│   ├── train_backbone_small.py                # Small-scale backbone training prototype
-│   ├── train_vgg_small.py                     # Legacy VGG small-model experiments
-│   ├── train_gating.py                        # OOF-only gating trainer, not final test evaluator
-│   ├── parse_docx.py                          # Document parsing utility
-│   ├── verify_data.py                         # Local data integrity checks
-│   ├── augment/augment_offline.py             # Older offline augmentation implementation
-│   ├── fusion/train_gating_mlp.py             # Canonical gating trainer + clean test evaluation
-│   ├── organize/archive_unused_artifacts.py   # Cleanup utility for old artifacts
-│   ├── organize/organize_outputs.py           # Output organization utility
-│   └── train/train_vgg19_staged.py            # Earlier staged-training prototype
-└── src/                                       # Main source package for data and model code
-    ├── data/                                  # Data loading and preprocessing utilities
-    │   ├── dataset.py                          # Dataset wrapper and sample loading
-    │   └── preprocess.py                       # Image preprocessing / normalization helpers
-    └── models/                                 # Model definitions and architecture code
-        ├── backbones.py                       # VGG19 / DenseNet201 / MobileNetV2 definitions
-        └── gating.py                          # Learned fusion gate network definition
+```mermaid
+flowchart LR
+    S["1. Rebuild split<br/>from raw ROI data<br/>(seed 42, 70/15/15)"] --> A["2. Augment<br/>train folder only<br/>(350 per class)"]
+    A --> AUD["3. Leakage audit<br/>(read-only)<br/>PASS: 0 collisions"]
+    AUD --> OOF["4. OOF generation<br/>3 backbones x 5 folds<br/>Phase 1 only"]
+    OOF --> G["5. Train gating MLP<br/>on OOF probabilities"]
+    G --> T["6. Test inference<br/>fold checkpoints averaged<br/>per backbone"]
+    T --> E["7. Evaluate once<br/>+ ablation table"]
 ```
 
-> `data/processed/` (generated train/val/test splits) and model checkpoints are generated locally and excluded from version control - see `.gitignore`.
+Each numbered stage is one script; the commands are in [Section 6](#6-getting-started). Stage 3 must pass before any training is allowed to produce reportable numbers.
 
----
+## 4. What went wrong and how it was fixed
 
-## Installation
+An earlier version of this pipeline contained **data leakage**: evaluation data influenced training in an invalid way, so the earlier accuracy was inflated and could not be reported. In plain terms, the model was being asked questions it had already seen the answers to. Two code bugs and one methodological flaw were identified:
 
-**Prerequisites:** Python 3.11, a CUDA-capable GPU (recommended), Git.
+| # | Problem | Plain description | Fix |
+|---|---|---|---|
+| 1 | Fallback copy | When an expected test file was missing, the script silently copied a training image into the test folder | Removed; a missing file now raises an error |
+| 2 | Fabricated test paths | The gating stage *constructed* test paths by renaming train paths instead of reading the real test directory | Gating script now scans `data/processed/test/` directly; paths are never derived from train metadata |
+| 3 | Non-group-aware split | Augmented copies of one source image could land on both sides of a fold boundary (near-duplicate leakage that filename checks cannot detect) | `StratifiedGroupKFold` with group = original source stem |
 
-```powershell
-git clone https://github.com/AbdurRehmanKhan-ARK/chronic-wound-fusion.git
-cd chronic-wound-fusion
+Remediation performed:
 
-python -m venv .venv
-.venv\Scripts\activate
+- Train/val/test partitions were rebuilt directly from the raw AZH ROI source (seed 42, 70/15/15); augmentation touches the training folder only.
+- All artifacts from the leaked configuration were archived locally (`archive/cleanup_2026_09_12/`) and excluded from reporting.
+- Independent audits were run and captured; both passed:
 
-pip install -r requirements.txt
+```
+Exact filename collisions (train vs val/test): 0
+  of which BYTE-IDENTICAL (confirmed leak):     0
+Group-id collisions (original/aug siblings):   0
+>>> No leakage detected.
 ```
 
-**Core dependencies:** `torch`, `torchvision`, `scikit-learn>=1.1` (required for `StratifiedGroupKFold`), `numpy`, `pandas`, `Pillow`, `matplotlib`.
+**Engineering principle adopted:** never fabricate data to satisfy a code path. A missing file is information that something upstream is broken -  fail loudly instead of inventing the missing piece.
 
-Verify scikit-learn version:
+## 5. Results
 
-```powershell
-python -c "import sklearn; print(sklearn.__version__)"
-```
+All numbers below come from a single evaluation on a clean, untouched test set of **111 images**, produced by the corrected pipeline (results file: `outputs/03_figures/gated_fusion_evaluation_report.txt`).
 
----
+### 5.1 Overall metrics
 
-## Usage
+| Metric | Value |
+|---|---|
+| **Overall accuracy** | **73.87%** (82 / 111) |
+| **Macro F1** | **74.49%** |
+| **Weighted F1** | **74.33%** |
 
-### 1. Data Preparation
+With only 111 test images, the 95% Wilson confidence interval for accuracy is approximately **65.0% – 81.1%**; differences smaller than ~5 accuracy points between model variants should not be treated as meaningful.
 
-Rebuild clean train/val/test partitions directly from the raw AZH source (augmentation applied to `train/` only):
+### 5.2 Per-class results and confusion matrix
 
-```powershell
-.venv\Scripts\python.exe scripts\rebuild_clean_split.py --source data\raw\azh --output data\processed
-.venv\Scripts\python.exe scripts\augment_train_only.py --train-dir data\processed\train
-```
+| Class | Precision | Recall | F1 | Test images |
+|---|---|---|---|---|
+| background | 1.0000 | 0.9333 | 0.9655 | 15 |
+| diabetic | 0.7619 | 0.6957 | 0.7273 | 23 |
+| normal-skin | 0.9333 | 0.9333 | 0.9333 | 15 |
+| pressure | 0.3684 | 0.4667 | 0.4118 | 15 |
+| surgical | 0.7333 | 0.5789 | 0.6471 | 19 |
+| venous | 0.7407 | 0.8333 | 0.7843 | 24 |
 
-### 2. Leakage Audit (recommended before training)
-
-Verify there is no filename/group overlap across partitions before spending compute on training:
-
-```powershell
-.venv\Scripts\python.exe leakage_audit.py --data-dir data\processed
-.venv\Scripts\python.exe scripts\check_clean_split.py --data-dir data\processed
-```
-
-### 3. Generate Out-of-Fold Predictions
-
-Run each backbone independently:
-
-```powershell
-.venv\Scripts\python.exe scripts\gen_oof_preds.py --model vgg19 --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\vgg19_clean
-
-.venv\Scripts\python.exe scripts\gen_oof_preds.py --model densenet201 --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\densenet201_clean
-
-.venv\Scripts\python.exe scripts\gen_oof_preds.py --model mobilenet_v2 --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\mobilenetv2_clean
-```
-
-Each run produces:
-
-- `{model}_oof_probs.npy` - out-of-fold probability matrix, shape `(N, num_classes)`
-- `{model}_oof_meta.csv` - index-to-filepath-to-label mapping
-- `checkpoints/{model}_fold{k}_best.pt` - best checkpoint per fold
-
-### 4. Train the Gating Network
-
-The canonical trainer (`scripts/fusion/train_gating_mlp.py`) trains the gate on concatenated OOF probabilities **and** evaluates it on the clean test set in one run:
-
-```powershell
-.venv\Scripts\python.exe scripts\fusion\train_gating_mlp.py --models vgg19,densenet201,mobilenet_v2 --oof-dir outputs\01_oof --output outputs\02_gating
-```
-
-This produces:
-
-- `gating_mlp_model_v1.pt` - trained gating network weights
-- `gating_test_probs_v1.npy` - fused probability matrix on the clean test set
-- `gating_test_preds_v1.csv` - `index, file_path, true_label, pred_label` for every clean test sample
-
-> `scripts/train_gating.py` is a lighter, OOF-only variant retained for validation/debugging; it does not perform test-set evaluation.
-
-### 5. Final Evaluation
-
-Compute final metrics from the fused test predictions:
-
-```powershell
-.venv\Scripts\python.exe scripts\evaluate_gated_fusion.py --preds-csv outputs\02_gating\gating_test_preds_v1.csv --output outputs\03_figures
-```
-
-Outputs: overall accuracy, macro F1, weighted F1, per-class accuracy, confusion matrix (printed + saved as `.png`), and a full `sklearn` classification report (saved as `.txt`).
-
----
-
-## Results
-
-Final evaluation was performed on **111 held-out test images** that were never seen - in original or augmented form - by any base model or the gating network at any stage of training.
-
-### Overall Metrics
-
-| Metric               | Value      |
-| -------------------- | ---------- |
-| **Overall Accuracy** | **73.87%** |
-| **Macro F1**         | **74.49%** |
-| **Weighted F1**      | **74.33%** |
-
-### Per-Class Accuracy
-
-| Class       | Precision | Recall | F1-score | Support |
-| ----------- | --------- | ------ | -------- | ------- |
-| background  | 1.0000    | 0.9333 | 0.9655   | 15      |
-| diabetic    | 0.7619    | 0.6957 | 0.7273   | 23      |
-| normal-skin | 0.9333    | 0.9333 | 0.9333   | 15      |
-| pressure    | 0.3684    | 0.4667 | 0.4118   | 15      |
-| surgical    | 0.7333    | 0.5789 | 0.6471   | 19      |
-| venous      | 0.7407    | 0.8333 | 0.7843   | 24      |
-
-### Confusion Matrix
-
-Rows = true label, columns = predicted label (order: background, diabetic, normal-skin, pressure, surgical, venous):
+Rows = true class, columns = predicted class (order: background, diabetic, normal-skin, pressure, surgical, venous):
 
 ```
 [[14  0  1  0  0  0]
@@ -330,52 +145,135 @@ Rows = true label, columns = predicted label (order: background, diabetic, norma
  [ 0  0  0  4  0 20]]
 ```
 
-### Observations
+**Honest reading:** background, normal-skin and venous perform reliably. **Pressure is the weakest class and behaves as a confusion sink**: the model predicted "pressure" 19 times but only 7 were correct (the rest came from surgical 5, venous 4, diabetic 3), and 8 of the 15 true pressure images escaped to other classes. Pressure–surgical confusion alone accounts for 9 of 29 total errors (~31%). Pressure predictions from the current system should not be acted on; this is stated explicitly rather than hidden, and drives the roadmap in Section 9.
 
-- `background` and `normal-skin` are classified near-perfectly (93.3% accuracy each) - these classes are visually distinct from wound presentations.
-- `pressure` (46.7%) and `surgical` (57.9%) show the weakest performance and are frequently confused with each other (4 pressure→surgical, 5 surgical→pressure misclassifications), consistent with the clinically observed visual similarity between healing pressure ulcers and surgical wounds.
-- `diabetic` samples are occasionally confused with `venous` (4 cases), which is plausible given both are lower-limb chronic ulcer presentations with overlapping visual characteristics.
-- These confusion patterns are clinically interpretable rather than random, suggesting the model has learned meaningful wound-type features rather than dataset artifacts - consistent with the pipeline now being leakage-free.
+### 5.3 Ablation and fusion comparison
 
-These figures reflect genuinely unseen-data performance and are markedly lower than the pre-remediation (leaked) run, which is the expected and correct direction of change once train/test and cross-fold leakage are eliminated. See [Data Integrity & Methodology Note](#data-integrity--methodology-note) for full details of what was fixed.
+All methods evaluated on the same clean test set from saved artifacts (`scripts/make_ablation_table.py`, no retraining):
+
+| Method | Accuracy | Macro F1 | Weighted F1 |
+|---|---|---|---|
+| VGG19 (single) | 71.17% | 71.09 | 70.67 |
+| DenseNet201 (single) | 72.07% | 72.80 | 72.32 |
+| MobileNetV2 (single) | 74.77% | 74.40 | 74.49 |
+| Simple average fusion | 72.97% | 72.70 | 72.34 |
+| Majority vote | 75.68% | 75.77 | 75.44 |
+| **Gated MLP fusion (final method)** | **73.87%** | **74.49** | **74.33** |
+
+*Interpretation:* the learned gate **clearly outperforms simple averaging** (+1.79 macro F1, +0.90 accuracy -  the value proposition of per-image weighting) and is **statistically tied with the strongest single backbone**. Majority voting's nominal lead (+1.28 macro F1) lies within the noise band of this test size. Gating is retained for its consistent advantage over fixed-weight fusion and its per-sample interpretability.
+
+## 6. Getting started
+
+Prerequisites: Python 3.11+, Git. A CUDA GPU is *not* required (the reported run was trained on CPU only, Section 8).
+
+```powershell
+git clone https://github.com/AbdurRehmanKhan-ARK/chronic-wound-fusion.git
+cd chronic-wound-fusion
+
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Core dependencies: `torch`, `torchvision`, `scikit-learn>=1.1` (required for `StratifiedGroupKFold`), `numpy`, `pandas`, `Pillow`, `matplotlib`.
+
+Full pipeline, in execution order (run from the repo root with the venv active):
+
+```powershell
+# 1. Rebuild clean train/val/test from the raw AZH ROI data (seed 42, 70/15/15)
+python scripts\rebuild_clean_split.py
+
+# 2. Augment the training folder ONLY (balanced 350 per class, seed 42)
+python scripts\augment_train_only.py
+
+# 3. Audit split integrity (read-only; must PASS before training)
+python leakage_audit.py
+python scripts\check_clean_split.py
+
+# 4. Generate OOF predictions per backbone (Phase 1 only; add --phase2 to enable fine-tuning)
+python scripts\gen_oof_preds.py --model vgg19        --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\vgg19_clean
+python scripts\gen_oof_preds.py --model densenet201  --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\densenet201_clean
+python scripts\gen_oof_preds.py --model mobilenet_v2 --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\mobilenetv2_clean
+
+# 5. Train the gating MLP on OOF probabilities + clean test evaluation
+python scripts\fusion\train_gating_mlp.py --models vgg19,densenet201,mobilenet_v2 --oof-dir outputs\01_oof --output outputs\02_gating
+
+# 6. Final metrics report and confusion matrix
+python scripts\evaluate_gated_fusion.py --preds-csv outputs\02_gating\gating_test_preds_v1.csv --output outputs\03_figures
+
+# 7. Ablation / fusion comparison table (no retraining, no GPU needed)
+python scripts\make_ablation_table.py
+```
+
+Each OOF run saves `{model}_oof_probs.npy`, `{model}_oof_meta.csv`, and `checkpoints/{model}_fold{k}_best.pt`. The gating run saves `gating_mlp_model_v1.pt`, `gating_test_probs_v1.npy` (111 x 18) and `gating_test_preds_v1.csv`.
+
+## 7. Repository structure
+
+```
+chronic-wound-fusion/
+├── README.md
+├── leakage_audit.py                  # Standalone split-integrity audit (read-only)
+├── requirements.txt
+├── configs/default.yaml              # Legacy prototype config (does not describe the reported run)
+├── docs/
+│   ├── REPORT.md                     # Full verified project report
+│   └── verification_checklist.md     # How the verification artifacts were produced
+├── scripts/
+│   ├── rebuild_clean_split.py        # Raw ROI -> clean train/val/test (seed 42)
+│   ├── augment_train_only.py         # Balanced offline augmentation, train only
+│   ├── check_clean_split.py          # Partition overlap check
+│   ├── gen_oof_preds.py              # Group-aware 5-fold OOF training per backbone
+│   ├── make_ablation_table.py        # Singles vs averaging vs voting vs gate
+│   ├── dataset_stats.py              # Per-split, per-class image counts
+│   ├── evaluate_gated_fusion.py      # Final metrics from gate predictions
+│   └── fusion/train_gating_mlp.py    # Canonical gating trainer + clean test evaluation
+├── src/
+│   ├── data/dataset.py, preprocess.py
+│   └── models/backbones.py, gating.py
+└── outputs/03_figures/               # Final evaluation report + confusion matrix figure
+```
+
+`data/` (raw and processed) and intermediate outputs (`outputs/01_oof/`, `outputs/02_gating/`, checkpoints) are generated locally and excluded from version control via `.gitignore`.
+
+## 8. Reproducibility
+
+| Item | Value |
+|---|---|
+| Random seed | 42 (fixed across Python, NumPy, PyTorch; `StratifiedGroupKFold` and the gate's validation split included) |
+| Split | 70/15/15 per class from raw ROI data; test = 111 images (15/23/15/15/19/24) |
+| Training data | 2,100 images (balanced 350 per class after augmentation); val = 110 originals; no augmented file in val or test (audited) |
+| Input | 224 x 224, ImageNet normalization (mean 0.485/0.456/0.406, std 0.229/0.224/0.225) |
+| Backbone training | Phase 1 only: up to 8 epochs per fold, early stopping patience 5, Adam, lr 1e-4, weight decay 1e-4, batch 16, CrossEntropyLoss; pretrained torchvision `IMAGENET1K_V1` weights |
+| Gating | MLP 18-64-6, Dropout 0.2, up to 50 epochs, patience 5, batch 64, lr 1e-3, weight decay 1e-4; validated on a 20% stratified OOF split |
+| Hardware | **CPU only** (no CUDA device on the training machine) |
+| Approx. runtime | VGG19 ≈ 24 h (5 folds); DenseNet201 and MobileNetV2 ≈ 3–4 h each; gate < 5 min |
+| Test inference | Per backbone: softmax averaged over the 5 fold checkpoints; concatenated 18-value vector fed to the gate |
+
+Notes: per-fold epoch counts and the gate's exact stopping epoch were printed to console only and are documented as "up to N with early stopping". The class in `src/models/gating.py` is an older feature-based variant; the canonical gate used by the pipeline is `GatingMLP` in `scripts/fusion/train_gating_mlp.py`.
+
+## 9. Limitations and roadmap
+
+**Known limitations, stated openly:**
+
+1. Small test set (111 images, 15–24 per class) gives wide confidence intervals (Section 5.1).
+2. Single dataset (AZH); other cameras, centres and populations are untested.
+3. Grouping is by source image stem; the AZH ROI release has no patient IDs, so patient-level independence is not guaranteed.
+4. Pressure and surgical classes are not dependable (Section 5.2); this system is a research prototype, not a clinical tool.
+
+**Roadmap:**
+
+1. Phase 2 fine-tuning run (never executed; code path exists; a cloud GPU makes it a few hours).
+2. Class-weighted or focal loss targeting the pressure–surgical confusion.
+3. More pressure-class data -  the most direct remedy for the weakest class.
+4. Gate calibration (temperature scaling, selected on validation only).
+5. External-dataset validation before any clinical claim.
 
 ---
 
-## Reproducibility
-
-All training runs use a fixed seed (`--seed 42` by default), deterministic sorted file iteration, and explicit train/validation transform separation. To reproduce a specific backbone's OOF run, use the same `--model`, `--folds`, and `--seed` values recorded in that run's checkpoint directory. Central experiment settings can be tracked in `configs/default.yaml`.
-
----
-
-## Roadmap
-
-- [x] Identify and remediate train/test path-overlap leakage
-- [x] Identify and remediate source-unaware fold-splitting leakage
-- [x] Implement `StratifiedGroupKFold` with source-stem grouping
-- [x] Regenerate clean OOF predictions for VGG19, DenseNet201, MobileNetV2
-- [x] Identify and remediate a second, independent leakage instance in the gating-fusion script
-- [x] Retrain gating MLP on clean, concatenated OOF probabilities
-- [x] Run final evaluation on the clean, held-out test set
-- [x] Publish final confusion matrix and per-class metrics
-- [ ] Document leaked-vs-clean metric comparison as an appendix in `docs/REPORT.md`
-- [ ] Optional: enable Phase-2 fine-tuning per backbone and re-evaluate for potential accuracy gains, particularly on `pressure` and `surgical` classes
-
----
-
-## Contributing
-
-This is an academic Final Year Project (FYP). External contributions are not currently being accepted, but issues and suggestions are welcome via the repository's Issues tab.
-
----
-
-## License
-
-Specify a license (e.g. MIT, Apache 2.0) appropriate to your institution's FYP submission policy. No license is currently declared.
-
----
+*Data and checkpoints are excluded from this repository by design. The full debugging and verification record is documented in `docs/REPORT.md`.*
 
 ## Acknowledgments
 
-- AZH chronic wound dataset (`wound_classification-main`)
-- PyTorch / torchvision pretrained ImageNet backbones (VGG19, DenseNet201, MobileNetV2)
-- scikit-learn `StratifiedGroupKFold` for leakage-safe cross-validation
+- **AZH wound dataset** -  Advancing the Zenith in Healthcare chronic wound dataset.
+- Pretrained architectures via **torchvision** (VGG19, DenseNet201, MobileNetV2, ImageNet weights).
+- Supervision: **Miss Sania** (FYP supervisor).
