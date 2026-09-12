@@ -203,7 +203,9 @@ def main():
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--weight-decay', type=float, default=1e-4)
-    parser.add_argument('--patience', type=int, default=5)
+    parser.add_argument('--label-smoothing', type=float, default=0.0,
+    help='Optional label smoothing for CrossEntropyLoss (e.g. 0.1)')
+    parser.add_argument('--patience', type=int, default=5)    
     parser.add_argument('--output', type=str, default='outputs')
     parser.add_argument('--seed', type=int, default=42)
     args = parser.parse_args()
@@ -260,7 +262,7 @@ def main():
 
         model = model.to(device)
 
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
         # Phase 1 optimizer
         opt = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=args.weight_decay)
