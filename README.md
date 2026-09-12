@@ -6,25 +6,31 @@ A deep learning pipeline for automated classification of chronic wound images in
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Dataset](#dataset)
-- [Architecture](#architecture)
-- [Data Integrity & Methodology Note](#data-integrity--methodology-note)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [1. Data Preparation](#1-data-preparation)
-  - [2. Leakage Audit (recommended before training)](#2-leakage-audit-recommended-before-training)
-  - [3. Generate Out-of-Fold Predictions](#3-generate-out-of-fold-predictions)
-  - [4. Train the Gating Network](#4-train-the-gating-network)
-  - [5. Final Evaluation](#5-final-evaluation)
-- [Results](#results)
-- [Reproducibility](#reproducibility)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+- [Chronic Wound Image Classification - Gated Multi-Model Fusion](#chronic-wound-image-classification---gated-multi-model-fusion)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Key Features](#key-features)
+  - [Dataset](#dataset)
+  - [Architecture](#architecture)
+  - [Data Integrity \& Methodology Note](#data-integrity--methodology-note)
+  - [Project Structure](#project-structure)
+  - [Installation](#installation)
+  - [Usage](#usage)
+    - [1. Data Preparation](#1-data-preparation)
+    - [2. Leakage Audit (recommended before training)](#2-leakage-audit-recommended-before-training)
+    - [3. Generate Out-of-Fold Predictions](#3-generate-out-of-fold-predictions)
+    - [4. Train the Gating Network](#4-train-the-gating-network)
+    - [5. Final Evaluation](#5-final-evaluation)
+  - [Results](#results)
+    - [Overall Metrics](#overall-metrics)
+    - [Per-Class Accuracy](#per-class-accuracy)
+    - [Confusion Matrix](#confusion-matrix)
+    - [Observations](#observations)
+  - [Reproducibility](#reproducibility)
+  - [Roadmap](#roadmap)
+  - [Contributing](#contributing)
+  - [License](#license)
+  - [Acknowledgments](#acknowledgments)
 
 ---
 
@@ -36,14 +42,14 @@ The pipeline is designed around **rigorous, leakage-free evaluation**: every bac
 
 **Target classes:**
 
-| Class | Description |
-|---|---|
-| `background` | Non-wound / background skin images |
-| `diabetic` | Diabetic foot ulcers |
-| `normal-skin` | Healthy, unaffected skin |
-| `pressure` | Pressure (bed) ulcers |
-| `surgical` | Surgical wounds |
-| `venous` | Venous leg ulcers |
+| Class         | Description                        |
+| ------------- | ---------------------------------- |
+| `background`  | Non-wound / background skin images |
+| `diabetic`    | Diabetic foot ulcers               |
+| `normal-skin` | Healthy, unaffected skin           |
+| `pressure`    | Pressure (bed) ulcers              |
+| `surgical`    | Surgical wounds                    |
+| `venous`      | Venous leg ulcers                  |
 
 ---
 
@@ -98,10 +104,10 @@ Backbone architectures are defined in `src/models/backbones.py`; the gating netw
 
 **Training regimen per backbone, per fold:**
 
-| Phase | Description |
-|---|---|
-| Phase 1 | Backbone frozen; only the classification head is trained. Early stopping on validation loss. |
-| Phase 2 *(optional)* | Last convolutional block unfrozen; fine-tuned at `lr / 10`. Disabled by default (`--phase2` flag). |
+| Phase                | Description                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| Phase 1              | Backbone frozen; only the classification head is trained. Early stopping on validation loss.       |
+| Phase 2 _(optional)_ | Last convolutional block unfrozen; fine-tuned at `lr / 10`. Disabled by default (`--phase2` flag). |
 
 ---
 
@@ -110,10 +116,12 @@ Backbone architectures are defined in `src/models/backbones.py`; the gating netw
 An early version of this pipeline exhibited data leakage defects that were identified, diagnosed, and remediated prior to producing any reportable results. Two separate instances were found and fixed:
 
 **1. Original pipeline (base-model training/evaluation):**
+
 - A fallback code path could copy a training image into the test directory when a corresponding test file was missing, allowing identical or near-identical images to appear in both partitions.
 - The original cross-validation logic (`StratifiedKFold`) balanced folds by class label only, with no awareness that multiple augmented derivatives of a single source image existed in the training set - allowing an original image and its augmented siblings to be split across the train and validation portions of the same fold.
 
 **2. Gating-fusion script (discovered during a later audit):**
+
 - The initial `train_gating.py` / `train_gating_mlp.py` implementations reintroduced the same fallback-copy pattern independently, while constructing test-set paths by string-replacing `/train/` with `/test/` in OOF metadata. Since augmented filenames (e.g. `aug_0000_10.jpg`) never legitimately exist under `data/processed/test/`, this fallback would copy the training file into the test directory - recreating leakage in a different part of the codebase.
 
 **Remediation applied:**
@@ -133,63 +141,63 @@ This project only reports metrics generated under the corrected, group-aware, le
 
 ```
 chronic-wound-fusion/
-├── README.md
-├── leakage_audit.py              # Standalone leakage/overlap verification
-├── requirements.txt
-├── configs/
-│   └── default.yaml              # Central experiment configuration
-├── archive/
-│   └── cleanup_2026_09_12/       # Archived leaked-run artifacts (audit trail only)
-├── data/
-│   └── raw/
-│       └── azh/
-│           └── wound_classification-main/   # Vendored upstream AZH reference
-├── docs/
-│   ├── project-plan.docx
-│   └── REPORT.md                 # Working project report / write-up
-├── notebooks/
-│   ├── 01_setup_check.ipynb
-│   └── gated_fusion_prototype.ipynb
-├── outputs/
-│   ├── 01_oof/
-│   │   ├── vgg19_clean/vgg19_oof_probs.npy
-│   │   ├── densenet201_clean/densenet201_oof_probs.npy
-│   │   └── mobilenetv2_clean/mobilenet_v2_oof_probs.npy
-│   ├── 02_gating/
-│   │   ├── gating_mlp_model_v1.pt
-│   │   ├── gating_test_probs_v1.npy
-│   │   └── gating_test_preds_v1.csv
-│   └── 03_figures/
-│       ├── gated_fusion_evaluation_report.txt
-│       └── gated_fusion_confusion_matrix.png
-├── scripts/
-│   ├── gen_oof_preds.py          # Group-aware K-fold OOF generation per backbone
-│   ├── rebuild_clean_split.py    # Rebuilds clean train/val/test from raw AZH data
-│   ├── check_clean_split.py      # Verifies split integrity (no cross-partition overlap)
-│   ├── augment_and_save.py
-│   ├── augment_train_only.py     # Ensures augmentation touches train only
-│   ├── dataset_stats.py
-│   ├── evaluate_checkpoint.py    # Single-backbone evaluation on the clean test set
-│   ├── evaluate_gated_fusion.py  # Final fused-model evaluation (accuracy, F1, confusion matrix)
-│   ├── evaluate_vgg.py
-│   ├── train_base.py
-│   ├── train_backbone_small.py
-│   ├── train_vgg_small.py
-│   ├── train_gating.py           # OOF-only gating trainer (no test-set evaluation)
-│   ├── parse_docx.py
-│   ├── verify_data.py
-│   ├── augment/augment_offline.py
-│   ├── fusion/train_gating_mlp.py   # Canonical gating trainer + clean test-set evaluation
-│   ├── organize/archive_unused_artifacts.py
-│   ├── organize/organize_outputs.py
-│   └── train/train_vgg19_staged.py
-└── src/
-    ├── data/
-    │   ├── dataset.py
-    │   └── preprocess.py
-    └── models/
-        ├── backbones.py           # VGG19 / DenseNet201 / MobileNetV2 definitions
-        └── gating.py              # Gating MLP definition
+├── README.md                                  # Project overview, setup, and final usage
+├── leakage_audit.py                           # Standalone leakage/overlap verification
+├── requirements.txt                           # Python dependencies for training and evaluation
+├── configs/                                   # Project config and experiment defaults
+│   └── default.yaml                           # Central experiment configuration
+├── archive/                                   # Archived legacy or leaked artifacts for audit history
+│   └── cleanup_2026_09_12/                    # Archived pre-cleanup runs and leakage-prone outputs
+├── data/                                      # Dataset storage root
+│   └── raw/                                   # Raw source datasets, kept local and not versioned
+│       └── azh/                               # AZH wound dataset reference copy
+│           └── wound_classification-main/     # Vendored upstream AZH dataset and labels
+├── docs/                                      # Documentation and draft writing material
+│   ├── project-plan.docx                      # Initial project plan / FYP planning doc
+│   └── REPORT.md                              # Working project write-up and report notes
+├── notebooks/                                 # Jupyter exploration and validation notebooks
+│   ├── 01_setup_check.ipynb                   # Environment and package sanity check
+│   └── gated_fusion_prototype.ipynb           # Prototype notebook kept only for historical context
+├── outputs/                                   # Generated artifacts for model runs and final reports
+│   ├── 01_oof/                                # Per-model OOF probabilities and metadata
+│   │   ├── vgg19_clean/vgg19_oof_probs.npy    # VGG19 OOF probabilities array
+│   │   ├── densenet201_clean/densenet201_oof_probs.npy # DenseNet201 OOF probabilities array
+│   │   └── mobilenetv2_clean/mobilenet_v2_oof_probs.npy # MobileNetV2 OOF probabilities array
+│   ├── 02_gating/                             # Gating network training and fused test outputs
+│   │   ├── gating_mlp_model_v1.pt             # Trained gating network weights
+│   │   ├── gating_test_probs_v1.npy           # Fused test-set probability matrix
+│   │   └── gating_test_preds_v1.csv           # Final clean-test predictions
+│   └── 03_figures/                            # Final report figures and short outputs
+│       ├── gated_fusion_evaluation_report.txt # Final metrics report in text form
+│       └── gated_fusion_confusion_matrix.png # Confusion matrix for final evaluation
+├── scripts/                                   # Core training, data, and evaluation scripts
+│   ├── gen_oof_preds.py                       # Group-aware K-fold OOF generation for each backbone
+│   ├── rebuild_clean_split.py                 # Rebuilds clean train/val/test splits from raw data
+│   ├── check_clean_split.py                   # Verifies no overlap across partitions
+│   ├── augment_and_save.py                    # Legacy augmentation helper
+│   ├── augment_train_only.py                  # Applies augmentation only to training subset
+│   ├── dataset_stats.py                       # Dataset summary and distribution checks
+│   ├── evaluate_checkpoint.py                 # Single-backbone evaluation helper
+│   ├── evaluate_gated_fusion.py               # Final fused-model evaluation script
+│   ├── evaluate_vgg.py                        # Legacy VGG evaluation helper
+│   ├── train_base.py                          # Early base training experiments
+│   ├── train_backbone_small.py                # Small-scale backbone training prototype
+│   ├── train_vgg_small.py                     # Legacy VGG small-model experiments
+│   ├── train_gating.py                        # OOF-only gating trainer, not final test evaluator
+│   ├── parse_docx.py                          # Document parsing utility
+│   ├── verify_data.py                         # Local data integrity checks
+│   ├── augment/augment_offline.py             # Older offline augmentation implementation
+│   ├── fusion/train_gating_mlp.py             # Canonical gating trainer + clean test evaluation
+│   ├── organize/archive_unused_artifacts.py   # Cleanup utility for old artifacts
+│   ├── organize/organize_outputs.py           # Output organization utility
+│   └── train/train_vgg19_staged.py            # Earlier staged-training prototype
+└── src/                                       # Main source package for data and model code
+    ├── data/                                  # Data loading and preprocessing utilities
+    │   ├── dataset.py                          # Dataset wrapper and sample loading
+    │   └── preprocess.py                       # Image preprocessing / normalization helpers
+    └── models/                                 # Model definitions and architecture code
+        ├── backbones.py                       # VGG19 / DenseNet201 / MobileNetV2 definitions
+        └── gating.py                          # Learned fusion gate network definition
 ```
 
 > `data/processed/` (generated train/val/test splits) and model checkpoints are generated locally and excluded from version control - see `.gitignore`.
@@ -292,22 +300,22 @@ Final evaluation was performed on **111 held-out test images** that were never s
 
 ### Overall Metrics
 
-| Metric | Value |
-|---|---|
+| Metric               | Value      |
+| -------------------- | ---------- |
 | **Overall Accuracy** | **73.87%** |
-| **Macro F1** | **74.49%** |
-| **Weighted F1** | **74.33%** |
+| **Macro F1**         | **74.49%** |
+| **Weighted F1**      | **74.33%** |
 
 ### Per-Class Accuracy
 
-| Class | Precision | Recall | F1-score | Support |
-|---|---|---|---|---|
-| background | 1.0000 | 0.9333 | 0.9655 | 15 |
-| diabetic | 0.7619 | 0.6957 | 0.7273 | 23 |
-| normal-skin | 0.9333 | 0.9333 | 0.9333 | 15 |
-| pressure | 0.3684 | 0.4667 | 0.4118 | 15 |
-| surgical | 0.7333 | 0.5789 | 0.6471 | 19 |
-| venous | 0.7407 | 0.8333 | 0.7843 | 24 |
+| Class       | Precision | Recall | F1-score | Support |
+| ----------- | --------- | ------ | -------- | ------- |
+| background  | 1.0000    | 0.9333 | 0.9655   | 15      |
+| diabetic    | 0.7619    | 0.6957 | 0.7273   | 23      |
+| normal-skin | 0.9333    | 0.9333 | 0.9333   | 15      |
+| pressure    | 0.3684    | 0.4667 | 0.4118   | 15      |
+| surgical    | 0.7333    | 0.5789 | 0.6471   | 19      |
+| venous      | 0.7407    | 0.8333 | 0.7843   | 24      |
 
 ### Confusion Matrix
 
