@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="Chronic Wound Classification — Gated Multi-Model Fusion" width="100%"/>
+<img src="docs/assets/banner.png" alt="Chronic Wound Classification - Gated Multi-Model Fusion" width="100%"/>
 
-# Chronic Wound Classification — Gated Multi-Model Fusion
+# Chronic Wound Classification - Gated Multi-Model Fusion
 
 **A leakage-free deep learning pipeline that classifies wound photographs into six categories, using three CNN backbones combined by a learned gating network.**
 
-> **Research extension of** _"A Decision-Level Fusion Framework for Enhanced Multi-Class Chronic Wound Detection"_ — Shamoon, Mustafa, Urooj & Mushtaq (FAST NUCES). This project replaces that study's decision-fusion stage with a learned gating network trained on out-of-fold predictions, and re-runs the entire evaluation under an audited, leakage-safe protocol.
+> **Research extension of** _"A Decision-Level Fusion Framework for Enhanced Multi-Class Chronic Wound Detection"_ - Shamoon, Mustafa, Urooj & Mushtaq (FAST NUCES). This project replaces that study's decision-fusion stage with a learned gating network trained on out-of-fold predictions, and re-runs the entire evaluation under an audited, leakage-safe protocol.
 
 ![Results](https://img.shields.io/badge/accuracy_79.28%25_%7C_macro_F1_79.43%25-2ec4b6?style=for-the-badge&labelColor=0d1b2a)
 ![Leakage Audit](https://img.shields.io/badge/leakage_audit-PASS_·_0_collisions-2ec4b6?style=for-the-badge&labelColor=0d1b2a)
@@ -22,16 +22,16 @@ _Two clean evaluation iterations, both reported honestly:_
 
 ## Table of Contents
 
-- [Chronic Wound Classification — Gated Multi-Model Fusion](#chronic-wound-classification--gated-multi-model-fusion)
+- [Chronic Wound Classification - Gated Multi-Model Fusion](#chronic-wound-classification--gated-multi-model-fusion)
   - [Table of Contents](#table-of-contents)
   - [1. What this project does](#1-what-this-project-does)
   - [2. How the system works](#2-how-the-system-works)
   - [3. Processing pipeline](#3-processing-pipeline)
   - [4. What went wrong and how it was fixed](#4-what-went-wrong-and-how-it-was-fixed)
   - [5. Results](#5-results)
-    - [5.1 Headline results — both iterations](#51-headline-results--both-iterations)
+    - [5.1 Headline results - both iterations](#51-headline-results--both-iterations)
     - [5.2 Per-class results and confusion matrices](#52-per-class-results-and-confusion-matrices)
-    - [5.3 Ablation — the gate wins every comparison](#53-ablation--the-gate-wins-every-comparison)
+    - [5.3 Ablation - the gate wins every comparison](#53-ablation--the-gate-wins-every-comparison)
   - [6. The Improvement Round](#6-the-improvement-round)
   - [7. Getting started](#7-getting-started)
   - [8. Repository structure](#8-repository-structure)
@@ -55,9 +55,9 @@ Given one photograph, the system selects one of six labels:
 | `pressure`    | Pressure ulcer (bed sore)                          |
 | `surgical`    | Surgical wound                                     |
 
-**In plain language:** three experienced "specialist" models each look at the photo and give an opinion (six probabilities each). A small fourth network — the **gating network** — acts as a coordinator: it reads all three opinions and learns which specialist to trust more for _this particular image_. The coordinator's answer becomes the final classification.
+**In plain language:** three experienced "specialist" models each look at the photo and give an opinion (six probabilities each). A small fourth network - the **gating network** - acts as a coordinator: it reads all three opinions and learns which specialist to trust more for _this particular image_. The coordinator's answer becomes the final classification.
 
-Why an ensemble? Different architectures make different mistakes. A coordinator that weighs them per image can outperform any fixed combination — and this repository contains the experimental proof (Section 5.3).
+Why an ensemble? Different architectures make different mistakes. A coordinator that weighs them per image can outperform any fixed combination - and this repository contains the experimental proof (Section 5.3).
 
 ## 2. How the system works
 
@@ -84,7 +84,7 @@ flowchart TB
 | Evaluation                   | `scripts/evaluate_gated_fusion.py`   | Computes metrics on the untouched test set                                                            |
 | Ablation                     | `scripts/make_ablation_table.py`     | Compares singles, averaging, majority vote and gating from saved artifacts (no retraining)            |
 
-**Training stages per backbone (per fold):** _Phase 1_ trains only the classification head while the pretrained feature extractor is frozen. _Phase 2_ unfreezes the last feature block and fine-tunes it at lr/10 — it was skipped in the baseline iteration (CPU budget) and executed in the Improvement Round (Section 6).
+**Training stages per backbone (per fold):** _Phase 1_ trains only the classification head while the pretrained feature extractor is frozen. _Phase 2_ unfreezes the last feature block and fine-tunes it at lr/10 - it was skipped in the baseline iteration (CPU budget) and executed in the Improvement Round (Section 6).
 
 ## 3. Processing pipeline
 
@@ -125,13 +125,13 @@ Group-id collisions (original/aug siblings):   0
 
 The captured audit outputs are committed at `outputs/leakage_audit_output.txt` and `outputs/check_clean_split_output.txt`.
 
-> **Engineering principle adopted:** never fabricate data to satisfy a code path. A missing file is information that something upstream is broken — fail loudly instead of inventing the missing piece.
+> **Engineering principle adopted:** never fabricate data to satisfy a code path. A missing file is information that something upstream is broken - fail loudly instead of inventing the missing piece.
 
 ## 5. Results
 
 All numbers come from evaluations on a clean, untouched test set of **111 images**. Two iterations are reported, both evaluated exactly once and never used for tuning.
 
-### 5.1 Headline results — both iterations
+### 5.1 Headline results - both iterations
 
 | Metric                   | Baseline (first clean iteration) | **Final (Improvement Round)** |
 | ------------------------ | -------------------------------- | ----------------------------- |
@@ -140,7 +140,7 @@ All numbers come from evaluations on a clean, untouched test set of **111 images
 | **Weighted F1**          | 74.33%                           | **79.44%**                    |
 | 95% Wilson CI (accuracy) | 65.0% – 81.1%                    | 70.8% – 85.8%                 |
 
-With 111 test images, differences smaller than ~5 accuracy points are within statistical noise; both results are stated with this uncertainty attached. The baseline is retained as documentation of the pipeline's first honest iteration — **no result in this repository has ever been tuned against the test set** (recipe decisions were made on out-of-fold validation metrics only).
+With 111 test images, differences smaller than ~5 accuracy points are within statistical noise; both results are stated with this uncertainty attached. The baseline is retained as documentation of the pipeline's first honest iteration - **no result in this repository has ever been tuned against the test set** (recipe decisions were made on out-of-fold validation metrics only).
 
 ### 5.2 Per-class results and confusion matrices
 
@@ -155,7 +155,7 @@ With 111 test images, differences smaller than ~5 accuracy points are within sta
 | surgical    | 0.7500    | 0.6316 | 0.6857 | 19          |
 | venous      | 0.8000    | 0.8333 | 0.8163 | 24          |
 
-Rows = true class, columns = predicted class (order: background, diabetic, normal-skin, pressure, surgical, venous) — **baseline → final:**
+Rows = true class, columns = predicted class (order: background, diabetic, normal-skin, pressure, surgical, venous) - **baseline → final:**
 
 ```
 Baseline:                          Final:
@@ -167,9 +167,9 @@ Baseline:                          Final:
  [ 0  0  0  4  0 20]]               [ 0  0  0  4  0 20]]
 ```
 
-**Honest reading:** after the Improvement Round, both non-wound classes are perfect, diabetic recall rose from 69.6% to 82.6%, and surgical-to-pressure errors fell from 5 to 0. **Pressure remains the weakest class and behaves as a confusion sink** — this is stated explicitly rather than hidden, and it drives the roadmap (Section 10). Pressure predictions from the current system should not be acted on clinically.
+**Honest reading:** after the Improvement Round, both non-wound classes are perfect, diabetic recall rose from 69.6% to 82.6%, and surgical-to-pressure errors fell from 5 to 0. **Pressure remains the weakest class and behaves as a confusion sink** - this is stated explicitly rather than hidden, and it drives the roadmap (Section 10). Pressure predictions from the current system should not be acted on clinically.
 
-### 5.3 Ablation — the gate wins every comparison
+### 5.3 Ablation - the gate wins every comparison
 
 All methods evaluated on the same clean test set from saved artifacts (no retraining). **Final configuration:**
 
@@ -182,7 +182,7 @@ All methods evaluated on the same clean test set from saved artifacts (no retrai
 | Majority vote                       | 78.38%     | 77.66     | 77.77       |
 | **Gated MLP fusion (final method)** | **79.28%** | **79.43** | **79.44**   |
 
-The learned gate beats the best single backbone (**+2.98 macro F1**), simple averaging (**+1.72**) and majority voting (**+1.76**). In the baseline round the gate was only tied with the strongest single model — meaning the value of learned per-image weighting _grows_ as backbone quality improves. This is the central experimental finding of the project.
+The learned gate beats the best single backbone (**+2.98 macro F1**), simple averaging (**+1.72**) and majority voting (**+1.76**). In the baseline round the gate was only tied with the strongest single model - meaning the value of learned per-image weighting _grows_ as backbone quality improves. This is the central experimental finding of the project.
 
 ## 6. The Improvement Round
 
@@ -194,7 +194,7 @@ After the baseline was frozen, a single controlled improvement round was execute
 | Phase 2 fine-tuning | not executed | executed (last block, lr/10)         | The lever CPU constraints had prevented                       |
 | Label smoothing     | 0.0          | 0.1                                  | Reduces overconfidence on visually overlapping classes        |
 
-**Evaluation discipline:** out-of-fold gains were confirmed first (VGG +0.01, DenseNet +2.81, MobileNet +5.03 macro F1) and only then was the final test evaluation run — once. An identical re-run after a session failure reproduced identical loss values, confirming deterministic seeding. Full details in `docs/REPORT.md` (Section 16).
+**Evaluation discipline:** out-of-fold gains were confirmed first (VGG +0.01, DenseNet +2.81, MobileNet +5.03 macro F1) and only then was the final test evaluation run - once. An identical re-run after a session failure reproduced identical loss values, confirming deterministic seeding. Full details in `docs/REPORT.md` (Section 16).
 
 ## 7. Getting started
 
@@ -224,12 +224,12 @@ python scripts\augment_train_only.py
 python leakage_audit.py
 python scripts\check_clean_split.py
 
-# 4a. Baseline recipe — Phase 1 only, 8 epochs
+# 4a. Baseline recipe - Phase 1 only, 8 epochs
 python scripts\gen_oof_preds.py --model vgg19        --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\vgg19_clean
 python scripts\gen_oof_preds.py --model densenet201  --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\densenet201_clean
 python scripts\gen_oof_preds.py --model mobilenet_v2 --folds 5 --phase1-epochs 8 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\mobilenetv2_clean
 
-# 4b. Final recipe (Improvement Round) — add Phase 2, longer training, label smoothing
+# 4b. Final recipe (Improvement Round) - add Phase 2, longer training, label smoothing
 python scripts\gen_oof_preds.py --model vgg19 --folds 5 --phase1-epochs 20 --phase2 --label-smoothing 0.1 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\vgg19_improved
 python scripts\gen_oof_preds.py --model densenet201 --folds 5 --phase1-epochs 20 --phase2 --label-smoothing 0.1 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\densenet201_improved
 python scripts\gen_oof_preds.py --model mobilenet_v2 --folds 5 --phase1-epochs 20 --phase2 --label-smoothing 0.1 --batch-size 16 --lr 1e-4 --weight-decay 1e-4 --output outputs\01_oof\mobilenet_v2_improved
@@ -297,7 +297,7 @@ chronic-wound-fusion/
         └── gating.py                  # older feature-based gate variant (canonical gate: GatingMLP in fusion/)
 ```
 
-`data/` (raw and processed) and the large intermediate outputs (`outputs/01_oof/`, `outputs/02_gating*/`, checkpoints, `.npy` arrays) are generated locally and excluded from version control via `.gitignore` — they are reproducible with the Section 7 commands. The committed text files under `outputs/` are the captured verification evidence.
+`data/` (raw and processed) and the large intermediate outputs (`outputs/01_oof/`, `outputs/02_gating*/`, checkpoints, `.npy` arrays) are generated locally and excluded from version control via `.gitignore` - they are reproducible with the Section 7 commands. The committed text files under `outputs/` are the captured verification evidence.
 
 ## 9. Reproducibility
 
@@ -327,7 +327,7 @@ Notes: per-fold epoch counts and the gate's exact stopping epoch were printed to
 
 **Roadmap:**
 
-1. More pressure-class data — the most direct remedy for the weakest class.
+1. More pressure-class data - the most direct remedy for the weakest class.
 2. Class-weighted or focal loss experiments for the pressure–surgical boundary (selected on OOF/validation only).
 3. Gate calibration (temperature scaling, selected on validation only).
 4. External-dataset validation before any clinical claim.
@@ -340,7 +340,7 @@ Notes: per-fold epoch counts and the gate's exact stopping epoch were printed to
 ### 💡 The story in one line
 
 > **We audited our own pipeline, caught the leakage that made our first numbers lie,
-> rebuilt everything honestly — and then improved the honest number.**
+> rebuilt everything honestly - and then improved the honest number.**
 
 **73.87%** _was not a failure. It was the first number we could trust._
 **79.28%** _is what disciplined, leakage-free iteration looks like._ 🎯
@@ -354,8 +354,8 @@ Research Extension · FAST NUCES · Supervised by **Ms. Sania Urooj**
 
 ## Acknowledgments
 
-- 📄 **Prior work** — _A Decision-Level Fusion Framework for Enhanced Multi-Class Chronic Wound Detection_, S. Shamoon, A. Mustafa, S. Urooj, M. Mushtaq (FAST NUCES). This repository is a leakage-safe extension of that study.
-- 👩‍🏫 **Ms. Sania Urooj** — supervisor of this extension and co-author of the original study.
-- 🩹 **AZH wound dataset** — Advancing the Zenith in Healthcare chronic wound dataset.
+- 📄 **Prior work** - _A Decision-Level Fusion Framework for Enhanced Multi-Class Chronic Wound Detection_, S. Shamoon, A. Mustafa, S. Urooj, M. Mushtaq (FAST NUCES). This repository is a leakage-safe extension of that study.
+- 👩‍🏫 **Ms. Sania Urooj** - supervisor of this extension and co-author of the original study.
+- 🩹 **AZH wound dataset** - Advancing the Zenith in Healthcare chronic wound dataset.
 - 🤖 Pretrained architectures via **torchvision** (VGG19, DenseNet201, MobileNetV2, ImageNet weights).
 - ☁️ Improvement-round compute via **Google Colab** (free T4 GPU).
