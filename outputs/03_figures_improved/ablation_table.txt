@@ -1,0 +1,22 @@
+Ablation / fusion comparison on clean test set (n=111)
+Source probs: outputs/02_gating_improved/gating_test_probs_v1.npy
+Source preds: outputs/02_gating_improved/gating_test_preds_v1.csv
+Model order: vgg19, densenet201, mobilenet_v2
+
+| Model | Accuracy | Macro F1 | Weighted F1 |
+|---|---|---|---|
+| vgg19 (single) | 71.17% | 71.31 | 70.69 |
+| densenet201 (single) | 76.58% | 76.45 | 76.45 |
+| mobilenet_v2 (single) | 73.87% | 72.71 | 73.01 |
+| Simple average fusion | 78.38% | 77.70 | 78.04 |
+| Majority vote (tie->avg prob) | 78.38% | 77.66 | 77.77 |
+| Gated MLP fusion (reported) | 79.28% | 79.43 | 79.44 |
+
+Best single backbone: densenet201 (single) (macro F1 76.45)
+Gate vs best single: +2.98 macro F1 points
+Gate vs simple average: +1.72 macro F1 points
+Gate vs majority vote: +1.76 macro F1 points
+Majority-vote ties broken by summed probability: 6 of 111 images
+
+Wilson 95% CI for gated accuracy: [70.8, 85.8]
+Differences smaller than ~5 accuracy points are within noise at this test size.
