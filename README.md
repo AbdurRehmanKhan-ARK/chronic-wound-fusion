@@ -252,52 +252,71 @@ Scripts marked **[pipeline]** are the canonical pipeline used for the reported r
 
 ```
 chronic-wound-fusion/
-├── README.md
-├── leakage_audit.py                   # [pipeline] standalone split-integrity audit (read-only)
-├── requirements.txt
+├── README.md                          # Main project guide: setup, pipeline, results, and usage
+├── leakage_audit.py                   # [pipeline] read-only split-integrity audit for file collisions and group leakage
+├── requirements.txt                   # Python dependencies for training, evaluation, and preprocessing
 ├── configs/
-│   └── default.yaml                   # [legacy] prototype config; does NOT describe the reported runs
+│   └── default.yaml                   # [legacy] prototype config; not the source of truth for the reported runs
 ├── docs/
-│   ├── REPORT.md                      # Full verified report: debugging + both iterations + evidence
-│   ├── assets/banner.png              # Repository banner
-│   ├── project-plan.docx              # Original project plan
-│   └── chronic_fusion_extracted.txt   # Extracted text of the earlier written report
+│   ├── REPORT.md                      # Full verified project report: debugging story, both iterations, and evidence
+│   ├── assets/
+│   │   └── banner.png                 # Repository banner image used in documentation
+│   ├── project-plan.docx              # Original project plan and early research design
+│   ├── Final-Report.pdf               # Final report PDF used for submission/reference
+│   ├── FYPReport_ChronicWounds5.docx # Word report draft used during project documentation
+│   ├── IEEE_Conference_ chronic wound_ (1).pdf # Conference-style source/reference document
+│   └── chronic_fusion_extracted.txt   # Extracted text from earlier written report drafts
 ├── notebooks/
-│   └── 01_setup_check.ipynb           # Environment sanity checks
-├── outputs/                           # Committed verification evidence (small text files)
-│   ├── leakage_audit_output.txt       # Audit result: 0 collisions, PASS
-│   ├── check_clean_split_output.txt   # Split overlap check: 0 duplicates, PASS
-│   ├── split_counts.txt               # Per-class train/val/test counts (2100 / 110 / 111)
-│   ├── 03_figures/                    # Baseline iteration results
-│   └── 03_figures_improved/           # Final iteration results (79.28%)
+│   └── 01_setup_check.ipynb           # Environment sanity check and package validation notebook
+├── outputs/
+│   ├── leakage_audit_output.txt       # Audit result: 0 exact collisions + 0 group collisions; PASS
+│   ├── check_clean_split_output.txt   # Clean-split validation output: 0 duplicates across train/val/test; PASS
+│   ├── split_counts.txt               # Verified per-class split counts: train/val/test totals
+│   ├── 01_oof/                        # Generated per-backbone OOF probability arrays and metadata (local, reproducible)
+│   │   └── ...                        # VGG19 / DenseNet201 / MobileNetV2 OOF outputs and checkpoints
+│   ├── 02_gating/                     # Trained gating model, fused probabilities, saved test predictions
+│   │   └── ...                        # Gating MLP weights and clean-test fusion outputs
+│   ├── 03_figures/                    # Baseline iteration evaluation figures and reports
+│   │   └── ...                        # Confusion matrix, metrics, baseline evidence
+│   └── 03_figures_improved/           # Final improved iteration results (79.28% accuracy)
+│       └── ...                        # Final round figures and metrics
 ├── scripts/
-│   ├── rebuild_clean_split.py         # [pipeline] raw ROI -> clean train/val/test (seed 42, 70/15/15)
-│   ├── augment_train_only.py          # [pipeline] balanced offline augmentation, train folder only
-│   ├── check_clean_split.py           # [pipeline] partition overlap check
-│   ├── gen_oof_preds.py               # [pipeline] group-aware 5-fold OOF training per backbone
-│   ├── fusion/train_gating_mlp.py     # [pipeline] canonical gating trainer + clean test evaluation
-│   ├── evaluate_gated_fusion.py       # [pipeline] final metrics from gate predictions
-│   ├── make_ablation_table.py         # [pipeline] fusion comparison from saved artifacts (no retraining)
-│   ├── dataset_stats.py               # [utility] per-split, per-class image counts
-│   ├── verify_data.py                 # [utility] raw ROI image counts
-│   ├── augment_and_save.py            # [legacy] older augmentation variant
-│   ├── train_base.py                  # [legacy] simple single-model trainer
-│   ├── train_backbone_small.py        # [legacy] small-subset experiments
-│   ├── train_vgg_small.py             # [legacy] small-subset VGG experiments
-│   ├── evaluate_vgg.py                # [legacy] single-model evaluation
-│   ├── evaluate_checkpoint.py         # [legacy] single-checkpoint evaluation (imports train_backbone_small)
-│   ├── train_gating.py                # [legacy] lighter OOF-only gate trainer (no test evaluation)
-│   └── parse_docx.py                  # [utility] docx text extraction used for report drafting
-└── src/
-    ├── data/
-    │   ├── dataset.py
-    │   └── preprocess.py
-    └── models/
-        ├── backbones.py               # VGG19 / DenseNet201 / MobileNetV2 loaders
-        └── gating.py                  # older feature-based gate variant (canonical gate: GatingMLP in fusion/)
+│   ├── rebuild_clean_split.py         # [pipeline] rebuilds raw ROI data into clean train/val/test split (seed 42, 70/15/15)
+│   ├── augment_train_only.py          # [pipeline] offline train-only augmentation with class balancing
+│   ├── check_clean_split.py           # [pipeline] verifies no overlap across train/val/test partitions
+│   ├── gen_oof_preds.py               # [pipeline] group-aware 5-fold OOF prediction generation for each backbone
+│   ├── fusion/
+│   │   └── train_gating_mlp.py        # [pipeline] canonical gating trainer + clean test evaluation logic
+│   ├── evaluate_gated_fusion.py       # [pipeline] computes final metrics from fused gating predictions
+│   ├── make_ablation_table.py         # [pipeline] builds the ablation/fusion comparison table from saved artifacts
+│   ├── dataset_stats.py               # [utility] per-split, per-class image counts and summary stats
+│   ├── verify_data.py                 # [utility] checks raw ROI dataset counts and integrity
+│   ├── augment_and_save.py            # [legacy] older augmentation variant retained for comparison only
+│   ├── train_base.py                  # [legacy] single-model baseline prototype
+│   ├── train_backbone_small.py        # [legacy] small-subset backbone experiments
+│   ├── train_vgg_small.py             # [legacy] VGG small-subset exploratory training
+│   ├── evaluate_vgg.py                # [legacy] older VGG evaluation helper
+│   ├── evaluate_checkpoint.py         # [legacy] older checkpoint evaluation utility
+│   ├── train_gating.py                # [legacy] lighter OOF-only gate trainer without final clean-test evaluation
+│   └── parse_docx.py                  # [utility] docx extraction helper used for report drafting
+├── src/
+│   ├── data/
+│   │   ├── dataset.py                 # Dataset loader and sample handling for train/val/test splits
+│   │   └── preprocess.py              # Image normalization and preprocessing helpers
+│   └── models/
+│       ├── backbones.py               # VGG19 / DenseNet201 / MobileNetV2 architecture loaders
+│       └── gating.py                  # Older feature-based gate variant; canonical gate is in scripts/fusion/train_gating_mlp.py
+├── archive/                           # Archived legacy or leakage-era experiments kept for audit/reference
+│   └── ...                            # Old outputs and cleanup-era artifacts retained outside the canonical pipeline
+├── data/
+│   └── raw/                           # Local raw source dataset; not version-controlled in the main repo
+│       └── azh/
+│           └── wound_classification-main/
+│               └── ...                # Original AZH ROI dataset and metadata copied from the upstream source
+└── .gitignore                         # Excludes generated data, checkpoints, and local artifacts from Git
 ```
 
-`data/` (raw and processed) and the large intermediate outputs (`outputs/01_oof/`, `outputs/02_gating*/`, checkpoints, `.npy` arrays) are generated locally and excluded from version control via `.gitignore` — they are reproducible with the Section 7 commands. The committed text files under `outputs/` are the captured verification evidence.
+`data/` (raw and processed) and the large intermediate outputs (`outputs/01_oof/`, `outputs/02_gating/`, checkpoint files, and `.npy` arrays) are generated locally and excluded from version control via `.gitignore` — they are reproducible with the Section 7 commands. The committed text files under `outputs/` are the captured verification evidence.
 
 ## 9. Reproducibility
 
