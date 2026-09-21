@@ -39,3 +39,10 @@ desktop.ini
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
+data/raw/medetec/
+
+# Personal/obsolete - never publish
+kaggle_pack.zip
+make_kaggle_pack.py
+docs/Original FYP Study Vs Gateed-Fusion Extension.pdf
+medetec_pack.zip
